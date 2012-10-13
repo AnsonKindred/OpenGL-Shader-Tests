@@ -1,3 +1,5 @@
+ import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.nio.IntBuffer;
 
 import javax.media.opengl.GL;
@@ -11,7 +13,7 @@ import javax.swing.JFrame;
 
 import com.jogamp.opengl.util.FPSAnimator;
 
-public class GLRenderer extends GLCanvas implements GLEventListener
+public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
 {
 	
 	private static final long serialVersionUID = -8513201172428486833L;
@@ -40,13 +42,14 @@ public class GLRenderer extends GLCanvas implements GLEventListener
 		// setup OpenGL Version 2
 		super(new GLCapabilities(GLProfile.get(GLProfile.GL2)));
 		
-		this.addGLEventListener(this);
-		this.setSize(1800, 1000);
-		
+		addGLEventListener(this);
+		setSize(1800, 1000);
+				
 	    the_frame = new JFrame("Hello World");
 	    the_frame.getContentPane().add(this);
 	    the_frame.setSize(the_frame.getContentPane().getPreferredSize());
 	    the_frame.setVisible(true);
+	    the_frame.addWindowListener(this);
 		
 		animator = new FPSAnimator(this, 60);
 		animator.start();
@@ -182,5 +185,54 @@ public class GLRenderer extends GLCanvas implements GLEventListener
 	public float getViewHeight()
 	{
 		return viewHeight;
+	}
+
+	@Override
+	public void windowActivated(WindowEvent arg0)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowClosed(WindowEvent arg0)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowClosing(WindowEvent arg0)
+	{
+		animator.stop();
+		System.exit(0);
+	}
+
+	@Override
+	public void windowDeactivated(WindowEvent arg0)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowDeiconified(WindowEvent arg0)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowIconified(WindowEvent arg0)
+	{
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowOpened(WindowEvent arg0)
+	{
+		// TODO Auto-generated method stub
+		
 	}
 }
