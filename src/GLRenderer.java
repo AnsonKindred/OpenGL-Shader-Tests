@@ -1,6 +1,5 @@
 import java.nio.IntBuffer;
 
-import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.GLCapabilities;
 import javax.media.opengl.GL2;
@@ -87,7 +86,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener
 		
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
-		gl.glVertexAttribPointer(positionAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+		gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 	    gl.glEnableVertexAttribArray(positionAttribute);
 	    
 		currentlyBoundBuffer = geometry.vertexBufferID;
@@ -108,7 +107,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener
        
 		gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
 		
-		Matrix.loadIdentityMV();
+		Matrix.loadIdentityMV3f();
 		
 		_render(gl, geometry);
 	}
@@ -124,7 +123,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener
 		viewWidth = 100;
 		viewHeight = viewWidth * ratio;
 		
-		Matrix.ortho(0, viewWidth, 0, viewHeight);
+		Matrix.ortho3f(0, viewWidth, 0, viewHeight);
 		
 		if (!didInit)
 		{
@@ -138,8 +137,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener
 	
 	public void _render(GL2 gl, Geometry geometry)
 	{
-		Matrix.pushMV();
-		Matrix.translate(1, 1, 1);
+		Matrix.pushMV3f();
+		Matrix.translate2f(1, 1);
 		
 		if (geometry.vertexBufferID != currentlyBoundBuffer)
 		{
@@ -149,15 +148,15 @@ public class GLRenderer extends GLCanvas implements GLEventListener
 			}
 			
 			gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-			gl.glVertexAttribPointer(positionAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+			gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 			currentlyBoundBuffer = geometry.vertexBufferID;
 		}
 	    
-        gl.glUniformMatrix4fv(mvpAttribute, 1, false, Matrix.multiply(Matrix.projection, Matrix.model_view), 0);
+        gl.glUniformMatrix3fv(mvpAttribute, 1, false, Matrix.multiply3f(Matrix.projection3f, Matrix.model_view3f), 0);
         
 		gl.glDrawArrays(geometry.drawMode, 0, geometry.getNumPoints());
 		
-		Matrix.popMV();
+		Matrix.popMV3f();
 	}
 	
 	public void screenToViewCoords(float[] xy)

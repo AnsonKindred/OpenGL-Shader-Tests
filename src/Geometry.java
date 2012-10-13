@@ -56,6 +56,6 @@ public class Geometry
 
 	public int getNumPoints() 
 	{
-		return vertices.length/3;
+		return vertices.length/2;
 	}
 }
