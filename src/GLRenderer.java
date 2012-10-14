@@ -29,7 +29,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	DirtGeometry geometry;
 	
 	// Shader attributes
-	private int shaderProgram, mvpAttribute, positionAttribute, colorAttribute;
+	private int shaderProgram, projectionAttribute, vertexAttribute, colorAttribute, positionAttribute;
 	
 	public static void main(String[] args) 
     {
@@ -63,8 +63,9 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
         
         gl.glLinkProgram(shaderProgram);
         
-        positionAttribute = gl.glGetAttribLocation(shaderProgram, "position");
-        mvpAttribute = gl.glGetUniformLocation(shaderProgram, "mvp");
+        vertexAttribute = gl.glGetAttribLocation(shaderProgram, "vertex");
+        positionAttribute = gl.glGetUniformLocation(shaderProgram, "position");
+        projectionAttribute = gl.glGetUniformLocation(shaderProgram, "projection");
         
 		gl.glClearColor(0f, 0f, 0f, 1f);
 		
@@ -89,8 +90,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
-		gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
-	    gl.glEnableVertexAttribArray(positionAttribute);
+		gl.glVertexAttribPointer(vertexAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
+	    gl.glEnableVertexAttribArray(vertexAttribute);
 	    
 		currentlyBoundBuffer = geometry.vertexBufferID;
 		geometry.needsCompile = false;
@@ -107,6 +108,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		final GL2 gl = d.getGL().getGL2();
 		
 		gl.glUseProgram(shaderProgram);
+		
+		gl.glUniformMatrix3fv(projectionAttribute, 1, false, Matrix.projection3f, 0);
        
 		gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
 		
@@ -152,11 +155,11 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 			}
 			
 			gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-			gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
+			gl.glVertexAttribPointer(vertexAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 			currentlyBoundBuffer = geometry.vertexBufferID;
 		}
 	    
-        gl.glUniformMatrix3fv(mvpAttribute, 1, false, Matrix.multiply3f(Matrix.projection3f, Matrix.model_view3f), 0);
+		gl.glUniform2fv(vertexAttribute, GL2.GL_FLOAT, new float[]{1, 1}, 0);
         
 		gl.glDrawArrays(geometry.drawMode, 0, geometry.getNumPoints());
 		
