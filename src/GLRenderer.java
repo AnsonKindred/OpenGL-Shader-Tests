@@ -24,9 +24,15 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private FPSAnimator animator;
 	
 	private boolean didInit = false;
+	private long totalDrawTime = 0;
+	private long numDrawIterations = 0;
 	
 	JFrame the_frame;
 	DirtGeometry geometry;
+	
+	private static final int NUM_THINGS = 100000;
+	
+	float[] position = new float[NUM_THINGS*2];
 	
 	// Shader attributes
 	private int shaderProgram, mvpAttribute, positionAttribute, colorAttribute;
@@ -76,7 +82,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		System.out.println("VBO Supported: " + VBOsupported);
 		
-		geometry = DirtGeometry.getInstance(1);
+		geometry = DirtGeometry.getInstance(.1f);
 		geometry.buildGeometry(viewWidth, viewHeight);
 		geometry.finalizeGeometry();
 		
@@ -99,11 +105,16 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	// Called by me on the first resize call, useful for things that can't be initialized until the screen size is known
 	public void viewInit(GL2 gl)
 	{
-		
+		for(int i = 0; i < NUM_THINGS; i++)
+		{
+			position[i*2] = (float) (Math.random()*viewWidth);
+			position[i*2+1] = (float) (Math.random()*viewWidth);
+		}
 	}
 	
 	public void display(GLAutoDrawable d)
 	{
+		long startDrawTime = System.currentTimeMillis();
 		final GL2 gl = d.getGL().getGL2();
 		
 		gl.glUseProgram(shaderProgram);
@@ -112,7 +123,18 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		Matrix.loadIdentityMV3f();
 		
-		_render(gl, geometry);
+		for(int i = 0; i < NUM_THINGS; i++)
+		{
+			_render(gl, geometry, position[i*2], position[i*2+1]);
+		}
+		totalDrawTime += System.currentTimeMillis() - startDrawTime;
+		numDrawIterations ++;
+		if(numDrawIterations > 10)
+		{
+			System.out.println(totalDrawTime / numDrawIterations);
+			totalDrawTime = 0;
+			numDrawIterations = 0;
+		}
 	}
 	
 	public void reshape(GLAutoDrawable d, int x, int y, int width, int height)
@@ -139,10 +161,10 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		}
 	}
 	
-	public void _render(GL2 gl, Geometry geometry)
+	public void _render(GL2 gl, Geometry geometry, float x, float y)
 	{
 		Matrix.pushMV3f();
-		Matrix.translate2f(1, 1);
+		Matrix.translate3f(x, y, 0);
 		
 		if (geometry.vertexBufferID != currentlyBoundBuffer)
 		{
