@@ -127,6 +127,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		{
 			_render(gl, geometry, position[i*2], position[i*2+1]);
 		}
+		
 		totalDrawTime += System.currentTimeMillis() - startDrawTime;
 		numDrawIterations ++;
 		if(numDrawIterations > 10)
@@ -164,7 +165,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	public void _render(GL2 gl, Geometry geometry, float x, float y)
 	{
 		Matrix.pushMV3f();
-		Matrix.translate3f(x, y, 0);
+		Matrix.translate2f(x, y);
 		
 		if (geometry.vertexBufferID != currentlyBoundBuffer)
 		{
