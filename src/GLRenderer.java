@@ -1,6 +1,10 @@
- import java.awt.event.WindowEvent;
+import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
+import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.nio.ShortBuffer;
 
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.GLCapabilities;
@@ -10,22 +14,29 @@ import javax.media.opengl.GLProfile;
 import javax.media.opengl.awt.GLCanvas;
 import javax.swing.JFrame;
 
+import com.jogamp.common.nio.PointerBuffer;
 import com.jogamp.opengl.util.FPSAnimator;
 
 public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
 {
 	
 	private static final long serialVersionUID = -8513201172428486833L;
+	
+	private static final int BATCH_SIZE = 1024;
+	
 	public float viewWidth, viewHeight;
 	public float screenWidth, screenHeight;
-	
-	private int currentlyBoundBuffer = 0;
 	
 	private FPSAnimator animator;
 	
 	private boolean didInit = false;
 	private long totalDrawTime = 0;
 	private long numDrawIterations = 0;
+	
+	IntBuffer counts;
+	PointerBuffer offsets;
+	
+	private int elementBufferID;;
 	
 	JFrame the_frame;
 	DirtGeometry geometry;
@@ -70,8 +81,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
         gl.glLinkProgram(shaderProgram);
         
         vertexAttribute = gl.glGetAttribLocation(shaderProgram, "vertex");
-        positionAttribute = gl.glGetUniformLocation(shaderProgram, "position");
         projectionAttribute = gl.glGetUniformLocation(shaderProgram, "projection");
+        positionAttribute = gl.glGetUniformLocation(shaderProgram, "position");
         
 		gl.glClearColor(0f, 0f, 0f, 1f);
 		
@@ -83,23 +94,61 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		System.out.println("VBO Supported: " + VBOsupported);
 		
+		// Calculate batch of vertex data
 		geometry = DirtGeometry.getInstance(.1f);
 		geometry.buildGeometry(viewWidth, viewHeight);
-		geometry.finalizeGeometry();
+		geometry.finalizeGeometry(BATCH_SIZE);
 		
 		int bytesPerFloat = Float.SIZE / Byte.SIZE;
-	    int numBytes = geometry.vertices.length * bytesPerFloat;
+	    int numBytes = geometry.getNumPoints() * 3 * bytesPerFloat * BATCH_SIZE;
 	    
+	    // Generate vertex buffer ID
 		IntBuffer vertexBufferID = IntBuffer.allocate(1);
 		gl.glGenBuffers(1, vertexBufferID);
 		geometry.vertexBufferID = vertexBufferID.get(0);
 		
+		// Load in the vertex data
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
-		gl.glVertexAttribPointer(vertexAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 	    gl.glEnableVertexAttribArray(vertexAttribute);
+	    gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
 	    
-		currentlyBoundBuffer = geometry.vertexBufferID;
+	    // Create the indices
+	    ByteBuffer vbb = ByteBuffer.allocateDirect(BATCH_SIZE * geometry.getNumPoints() * Short.SIZE);
+		vbb.order(ByteOrder.nativeOrder());
+		ShortBuffer indices = vbb.asShortBuffer();
+	    for(int i = 0; i < BATCH_SIZE * geometry.getNumPoints(); i++)
+	    {
+	    	indices.put((short) (i));
+	    }
+	    indices.rewind();
+	    
+	    // Create the element buffer for the indices
+	    IntBuffer elementBufferIDBuffer = IntBuffer.allocate(1);
+	    gl.glGenBuffers(1, elementBufferIDBuffer);
+	    elementBufferID = elementBufferIDBuffer.get(0);
+	    
+	    // Load the index data into the element buffer
+	    gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, elementBufferID);
+	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, Short.SIZE*BATCH_SIZE*geometry.getNumPoints(), indices, GL2.GL_STATIC_DRAW);
+	    
+	    // Create the counts
+	    vbb = ByteBuffer.allocateDirect(BATCH_SIZE * Integer.SIZE);
+		vbb.order(ByteOrder.nativeOrder());
+		counts = vbb.asIntBuffer();
+	    for(int i = 0; i < BATCH_SIZE; i++)
+	    {
+	    	counts.put(geometry.getNumPoints());
+	    }
+	    counts.rewind();
+	    
+	    offsets = PointerBuffer.allocateDirect(BATCH_SIZE);
+	    for(int i = 0; i < BATCH_SIZE; i++)
+	    {
+	    	offsets.put(geometry.getNumPoints()*i*2);
+	    }
+	    offsets.rewind();
+	    
 		geometry.needsCompile = false;
 	}
 	
@@ -109,12 +158,18 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		for(int i = 0; i < NUM_THINGS; i++)
 		{
 			position[i*2] = (float) (Math.random()*viewWidth);
-			position[i*2+1] = (float) (Math.random()*viewWidth);
+			position[i*2+1] = (float) (Math.random()*viewHeight);
 		}
 	}
 	
 	public void display(GLAutoDrawable d)
 	{
+
+		if (!didInit || geometry.vertexBufferID == 0)
+		{
+			return;
+		}
+		
 		long startDrawTime = System.currentTimeMillis();
 		final GL2 gl = d.getGL().getGL2();
 		
@@ -126,10 +181,16 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		Matrix.loadIdentityMV3f();
 		
-		for(int i = 0; i < NUM_THINGS; i++)
+		//gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
+		//gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+	    int i = 0;
+		for(; i < NUM_THINGS/BATCH_SIZE; i++)
 		{
-			_render(gl, geometry, position[i*2], position[i*2+1]);
+			_renderBatch(gl, geometry, i*BATCH_SIZE, BATCH_SIZE);
 		}
+		// Get the remainder that didn't git perfectly into a batch
+		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
+		
 		totalDrawTime += System.currentTimeMillis() - startDrawTime;
 		numDrawIterations ++;
 		if(numDrawIterations > 10)
@@ -138,6 +199,28 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 			totalDrawTime = 0;
 			numDrawIterations = 0;
 		}
+	}
+	
+	public void _render(GL2 gl, Geometry geometry, float x, float y)
+	{
+		if (geometry.vertexBufferID == 0)
+		{
+			return;
+		}
+		
+		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
+		gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+	    
+		//gl.glUniform2fv(positionBlockAttribute, 2, new float[]{x, y}, 0);
+        
+		gl.glDrawArrays(geometry.drawMode, 0, geometry.getNumPoints());
+	}
+	
+	public void _renderBatch(GL2 gl, Geometry geometry, int offset, int count)
+	{
+		gl.glUniform1fv(positionAttribute, count*2, position, offset*2);
+		//gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, elementBufferID);
+		gl.glMultiDrawElements(geometry.drawMode, counts, GL2.GL_UNSIGNED_SHORT, offsets, BATCH_SIZE);
 	}
 	
 	public void reshape(GLAutoDrawable d, int x, int y, int width, int height)
@@ -162,25 +245,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		{
 			// respond to view size changing
 		}
-	}
-	
-	public void _render(GL2 gl, Geometry geometry, float x, float y)
-	{
-		if (geometry.vertexBufferID != currentlyBoundBuffer)
-		{
-			if (geometry.vertexBufferID == 0)
-			{
-				return;
-			}
-			
-			gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-			gl.glVertexAttribPointer(vertexAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
-			currentlyBoundBuffer = geometry.vertexBufferID;
-		}
-	    
-		gl.glUniform2fv(vertexAttribute, GL2.GL_FLOAT, new float[]{x, y}, 0);
-        
-		gl.glDrawArrays(geometry.drawMode, 0, geometry.getNumPoints());
 	}
 	
 	public void screenToViewCoords(float[] xy)

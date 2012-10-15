@@ -11,7 +11,6 @@ public class Geometry
 	public FloatBuffer vertexBuffer  = null;
 	public float[] vertices = null;
 	
-	public int textureBufferID = 0;
 	public int vertexBufferID = 0;
 	
 	public int drawMode;
@@ -49,6 +48,34 @@ public class Geometry
         vertexBuffer = vbb.asFloatBuffer();
         // add the coordinates to the FloatBuffer
         vertexBuffer.put(vertices);
+        vertexBuffer.rewind();
+        
+        needsCompile = true;
+	}
+	
+	public void finalizeGeometry(int numInstances)
+	{
+		hasChanged = false;
+		
+		if(vertices == null) return;
+
+		int num_vertices = this.getNumPoints();
+        
+        // initialize vertex Buffer (# of coordinate values * 4 bytes per float)  
+		ByteBuffer vbb = ByteBuffer.allocateDirect(num_vertices * 3 * Float.SIZE * numInstances);
+		vbb.order(ByteOrder.nativeOrder());
+        vertexBuffer = vbb.asFloatBuffer();
+
+		for(int i = 0; i < numInstances; i++)
+		{
+			for(int v = 0; v < num_vertices; v++)
+			{
+				int vertex_index = v * 2;
+				vertexBuffer.put(vertices[vertex_index]);
+				vertexBuffer.put(vertices[vertex_index+1]);
+				vertexBuffer.put(i);
+			}
+		}
         vertexBuffer.rewind();
         
         needsCompile = true;

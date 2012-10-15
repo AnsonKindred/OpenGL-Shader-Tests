@@ -1,11 +1,14 @@
 uniform mat3 projection;
-attribute vec2 vertex;
-uniform vec2 position;
+attribute vec3 vertex;
+
+uniform float position[1024];
+
 attribute vec4 vertex_color;
 varying vec4 color;
 
 void main(void)  
 { 
 	color = vertex_color;  
-	gl_Position = vec4(projection * vec3(vertex+position, 1), 1); 
+	vec3 real_position = vec3(vertex.x + position[int(vertex.z)*2], vertex.y + position[int(vertex.z)*2+1], 1); 
+	gl_Position = vec4(projection * real_position, 1); 
 }
