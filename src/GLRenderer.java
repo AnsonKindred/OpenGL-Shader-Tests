@@ -1,11 +1,6 @@
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.nio.ShortBuffer;
-
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.GLCapabilities;
 import javax.media.opengl.GL2;
@@ -14,7 +9,6 @@ import javax.media.opengl.GLProfile;
 import javax.media.opengl.awt.GLCanvas;
 import javax.swing.JFrame;
 
-import com.jogamp.common.nio.PointerBuffer;
 import com.jogamp.opengl.util.FPSAnimator;
 
 public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
@@ -23,6 +17,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private static final long serialVersionUID = -8513201172428486833L;
 	
 	private static final int BATCH_SIZE = 1024;
+	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
 	
 	public float viewWidth, viewHeight;
 	public float screenWidth, screenHeight;
@@ -33,11 +28,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private long totalDrawTime = 0;
 	private long numDrawIterations = 0;
 	
-	IntBuffer counts;
-	PointerBuffer offsets;
-	
-	private int elementBufferID;;
-	
 	JFrame the_frame;
 	DirtGeometry geometry;
 	
@@ -46,7 +36,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	float[] position = new float[NUM_THINGS*2];
 	
 	// Shader attributes
-	private int shaderProgram, projectionAttribute, vertexAttribute, colorAttribute, positionAttribute;
+	private int shaderProgram, projectionAttribute, vertexAttribute, positionAttribute;
 	
 	public static void main(String[] args) 
     {
@@ -77,79 +67,68 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		final GL2 gl = d.getGL().getGL2();
 		
 		shaderProgram = ShaderLoader.compileProgram(gl, "default");
-        
         gl.glLinkProgram(shaderProgram);
         
-        vertexAttribute = gl.glGetAttribLocation(shaderProgram, "vertex");
-        projectionAttribute = gl.glGetUniformLocation(shaderProgram, "projection");
-        positionAttribute = gl.glGetUniformLocation(shaderProgram, "position");
+        _getShaderAttributes(gl);
         
-		gl.glClearColor(0f, 0f, 0f, 1f);
+        _checkGLCapabilities(gl);
+		_initGLSettings(gl);
 		
-		gl.glBlendFunc(GL2.GL_SRC_ALPHA, GL2.GL_ONE_MINUS_SRC_ALPHA);
-		gl.glEnable(GL2.GL_BLEND);
-		
-		boolean VBOsupported = gl.isFunctionAvailable("glGenBuffersARB") && gl.isFunctionAvailable("glBindBufferARB")
-				&& gl.isFunctionAvailable("glBufferDataARB") && gl.isFunctionAvailable("glDeleteBuffersARB");
-		
-		System.out.println("VBO Supported: " + VBOsupported);
-		
-		// Calculate batch of vertex data
+		// Calculate batch of vertex data from dirt geometry
 		geometry = DirtGeometry.getInstance(.1f);
 		geometry.buildGeometry(viewWidth, viewHeight);
 		geometry.finalizeGeometry(BATCH_SIZE);
+	    
+	    geometry.vertexBufferID = _generateBufferID(gl);
+		_loadVertexBuffer(gl, geometry);
 		
-		int bytesPerFloat = Float.SIZE / Byte.SIZE;
+		geometry.indexBufferID = _generateBufferID(gl);
+		_loadIndexBuffer(gl, geometry);
+	}
+	
+	private void _initGLSettings(GL2 gl)
+	{
+		gl.glClearColor(0f, 0f, 0f, 1f);
+	}
+	
+	private void _loadIndexBuffer(GL2 gl, Geometry geometry)
+	{
+	    gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
+	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, Short.SIZE*BATCH_SIZE*geometry.getNumPoints(), geometry.indexBuffer, GL2.GL_STATIC_DRAW);
+	}
+	
+	private void _loadVertexBuffer(GL2 gl, Geometry geometry)
+	{
 	    int numBytes = geometry.getNumPoints() * 3 * bytesPerFloat * BATCH_SIZE;
 	    
-	    // Generate vertex buffer ID
-		IntBuffer vertexBufferID = IntBuffer.allocate(1);
-		gl.glGenBuffers(1, vertexBufferID);
-		geometry.vertexBufferID = vertexBufferID.get(0);
-		
-		// Load in the vertex data
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
 	    gl.glEnableVertexAttribArray(vertexAttribute);
 	    gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
-	    
-	    // Create the indices
-	    ByteBuffer vbb = ByteBuffer.allocateDirect(BATCH_SIZE * geometry.getNumPoints() * Short.SIZE);
-		vbb.order(ByteOrder.nativeOrder());
-		ShortBuffer indices = vbb.asShortBuffer();
-	    for(int i = 0; i < BATCH_SIZE * geometry.getNumPoints(); i++)
-	    {
-	    	indices.put((short) (i));
-	    }
-	    indices.rewind();
-	    
-	    // Create the element buffer for the indices
-	    IntBuffer elementBufferIDBuffer = IntBuffer.allocate(1);
-	    gl.glGenBuffers(1, elementBufferIDBuffer);
-	    elementBufferID = elementBufferIDBuffer.get(0);
-	    
-	    // Load the index data into the element buffer
-	    gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, elementBufferID);
-	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, Short.SIZE*BATCH_SIZE*geometry.getNumPoints(), indices, GL2.GL_STATIC_DRAW);
-	    
-	    // Create the counts
-	    vbb = ByteBuffer.allocateDirect(BATCH_SIZE * Integer.SIZE);
-		vbb.order(ByteOrder.nativeOrder());
-		counts = vbb.asIntBuffer();
-	    for(int i = 0; i < BATCH_SIZE; i++)
-	    {
-	    	counts.put(geometry.getNumPoints());
-	    }
-	    counts.rewind();
-	    
-	    offsets = PointerBuffer.allocateDirect(BATCH_SIZE);
-	    for(int i = 0; i < BATCH_SIZE; i++)
-	    {
-	    	offsets.put(geometry.getNumPoints()*i*2);
-	    }
-	    offsets.rewind();
-	    
-		geometry.needsCompile = false;
+	}
+	
+	private int _generateBufferID(GL2 gl)
+	{
+		IntBuffer bufferIDBuffer = IntBuffer.allocate(1);
+		gl.glGenBuffers(1, bufferIDBuffer);
+		
+		return bufferIDBuffer.get(0);
+	}
+	
+	private void _checkGLCapabilities(GL2 gl)
+	{
+		// TODO: Respond to this information in a meaningful way.
+		boolean VBOsupported = gl.isFunctionAvailable("glGenBuffersARB") && gl.isFunctionAvailable("glBindBufferARB")
+				&& gl.isFunctionAvailable("glBufferDataARB") && gl.isFunctionAvailable("glDeleteBuffersARB");
+		
+		System.out.println("VBO Supported: " + VBOsupported);
+	}
+	
+	private void _getShaderAttributes(GL2 gl)
+	{
+        vertexAttribute = gl.glGetAttribLocation(shaderProgram, "vertex");
+        projectionAttribute = gl.glGetUniformLocation(shaderProgram, "projection");
+        positionAttribute = gl.glGetUniformLocation(shaderProgram, "position");
 	}
 	
 	// Called by me on the first resize call, useful for things that can't be initialized until the screen size is known
@@ -181,14 +160,18 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		Matrix.loadIdentityMV3f();
 		
+		// If we were drawing any other buffers here we'd need to set this every time
+		// but instead we just leave them bound after initialization, saves a little render time
 		//gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		//gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+		//gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
+		
 	    int i = 0;
 		for(; i < NUM_THINGS/BATCH_SIZE; i++)
 		{
 			_renderBatch(gl, geometry, i*BATCH_SIZE, BATCH_SIZE);
 		}
-		// Get the remainder that didn't git perfectly into a batch
+		// Get the remainder that didn't fit perfectly into a batch
 		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
 		
 		totalDrawTime += System.currentTimeMillis() - startDrawTime;
@@ -201,26 +184,10 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		}
 	}
 	
-	public void _render(GL2 gl, Geometry geometry, float x, float y)
-	{
-		if (geometry.vertexBufferID == 0)
-		{
-			return;
-		}
-		
-		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-		gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
-	    
-		//gl.glUniform2fv(positionBlockAttribute, 2, new float[]{x, y}, 0);
-        
-		gl.glDrawArrays(geometry.drawMode, 0, geometry.getNumPoints());
-	}
-	
 	public void _renderBatch(GL2 gl, Geometry geometry, int offset, int count)
 	{
 		gl.glUniform1fv(positionAttribute, count*2, position, offset*2);
-		//gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, elementBufferID);
-		gl.glMultiDrawElements(geometry.drawMode, counts, GL2.GL_UNSIGNED_SHORT, offsets, BATCH_SIZE);
+		gl.glMultiDrawElements(geometry.drawMode, geometry.countBuffer, GL2.GL_UNSIGNED_SHORT, geometry.offsetBuffer, BATCH_SIZE);
 	}
 	
 	public void reshape(GLAutoDrawable d, int x, int y, int width, int height)
