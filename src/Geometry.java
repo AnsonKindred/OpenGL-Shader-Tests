@@ -2,9 +2,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
-import java.nio.ShortBuffer;
-
-import com.jogamp.common.nio.PointerBuffer;
 
 /**
  * Don't use directly. Subclasses should always be singleton.
@@ -14,8 +11,6 @@ public class Geometry
 	public float[] vertices = null;
 	
 	IntBuffer indexBuffer;
-	IntBuffer countBuffer;
-	PointerBuffer offsetBuffer;
 	FloatBuffer vertexBuffer;
 	
 	public int vertexBufferID = 0;
@@ -88,27 +83,9 @@ public class Geometry
 		
 	    for(int i = 0; i < total_num_vertices; i++)
 	    {
-	    	indexBuffer.put((short) (i));
+	    	indexBuffer.put(i);
 	    }
 	    indexBuffer.rewind();
-	    
-	    // Create the counts
-	    vbb = ByteBuffer.allocateDirect(numInstances * Integer.SIZE);
-		vbb.order(ByteOrder.nativeOrder());
-		countBuffer = vbb.asIntBuffer();
-	    for(int i = 0; i < numInstances; i++)
-	    {
-	    	countBuffer.put(num_vertices);
-	    }
-	    countBuffer.rewind();
-	    
-	    // create the offsets
-	    offsetBuffer = PointerBuffer.allocateDirect(numInstances);
-	    for(int i = 0; i < numInstances; i++)
-	    {
-	    	offsetBuffer.put(num_vertices*i*Integer.SIZE/Byte.SIZE);
-	    }
-	    offsetBuffer.rewind();
 	}
 
 	public int getNumPoints() 

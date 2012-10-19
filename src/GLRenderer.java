@@ -19,9 +19,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	private static final long serialVersionUID = -8513201172428486833L;
 	
-	private static final int BATCH_SIZE = 9000;
+	private int BATCH_SIZE = 10;
 	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
-	private static final int bytesPerShort = Short.SIZE / Byte.SIZE;
 	private static final int bytesPerInt = Integer.SIZE / Byte.SIZE;
 	
 	public float viewWidth, viewHeight;
@@ -37,7 +36,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	JFrame the_frame;
 	DirtGeometry geometry;
 	
-	private static final int NUM_THINGS = 1000000;
+	private static final int NUM_THINGS = 180000000;
 	
 	float[] position = new float[NUM_THINGS*2];
 	
@@ -53,6 +52,11 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	{
 		// setup OpenGL Version 2
 		super(new GLCapabilities(GLProfile.get(GLProfile.GL2)));
+		
+		long heapFreeSize = Runtime.getRuntime().freeMemory();
+		// Just to be safe, we won't use more than half of the available heap
+		BATCH_SIZE = (int) (Math.min((heapFreeSize/2)/(Float.SIZE*9), NUM_THINGS));
+		System.out.println("Dynamic batch size: " + BATCH_SIZE);
 		
 		addGLEventListener(this);
 		setSize(1800, 1000);
@@ -88,9 +92,11 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	    
 	    geometry.vertexBufferID = _generateBufferID(gl);
 		_loadVertexBuffer(gl, geometry);
+		geometry.vertexBuffer = null;
 		
 		geometry.indexBufferID = _generateBufferID(gl);
 		_loadIndexBuffer(gl, geometry);
+		geometry.indexBuffer = null;
 		
 		geometry.positionBufferID = _generateBufferID(gl);
 	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
@@ -125,7 +131,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private void _loadVertexBuffer(GL2 gl, Geometry geometry)
 	{
 	    int numBytes = geometry.getNumPoints() * 3 * bytesPerFloat * BATCH_SIZE;
-	    
+	    System.out.println(numBytes);
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
 	    gl.glEnableVertexAttribArray(vertexAttribute);
@@ -169,7 +175,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		gl.glUniformMatrix3fv(projectionAttribute, 1, false, Matrix.projection3f, 0);
 		gl.glUniform1i(batchSizeAttribute, BATCH_SIZE);
-		// Load position data into a texture buffer
+		
 		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
 	    ByteBuffer textureBuffer = gl.glMapBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_WRITE_ONLY);
 	    FloatBuffer textureFloatBuffer = textureBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
@@ -185,7 +191,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	public void display(GLAutoDrawable d)
 	{
-
 		if (!didInit || geometry.vertexBufferID == 0)
 		{
 			return;
@@ -209,32 +214,20 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	    }
 	    
 	    gl.glUnmapBuffer(GL2.GL_TEXTURE_BUFFER);
-	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
-		
-		// If we were drawing any other buffers here we'd need to set this every time
-		// but instead we just leave them bound after initialization, saves a little render time
-		//gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-		//gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
-		//gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
 		
 	    int i = 0;
 		for(; i < NUM_THINGS/BATCH_SIZE; i++)
 		{
 			gl.glUniform1i(batchIndexAttribute, i);
-			gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
 			_renderBatch(gl, geometry, i*BATCH_SIZE, BATCH_SIZE);
-			gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
 		}
-		gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
 		gl.glUniform1i(batchIndexAttribute, i);
 		// Get the remainder that didn't fit perfectly into a batch
-		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
-
-		gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
+		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);;
 		
 		
 		numDrawIterations ++;
-		if(numDrawIterations > 10)
+		if(numDrawIterations > 1)
 		{
 			long totalDrawTime = System.currentTimeMillis() - startTime;
 			System.out.println(totalDrawTime / numDrawIterations);
@@ -246,8 +239,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	public void _renderBatch(GL2 gl, Geometry geometry, int offset, int count)
 	{
-		//gl.glUniform1fv(positionAttribute, count*2, position, offset*2);
-		gl.glMultiDrawElements(geometry.drawMode, geometry.countBuffer, GL2.GL_UNSIGNED_INT, geometry.offsetBuffer, count);
+		gl.glDrawElements(geometry.drawMode, count*3, GL2.GL_UNSIGNED_INT, 0);
 	}
 	
 	public void reshape(GLAutoDrawable d, int x, int y, int width, int height)
