@@ -19,7 +19,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	private static final long serialVersionUID = -8513201172428486833L;
 	
-	private static final int BATCH_SIZE = 64;
+	private static final int BATCH_SIZE = 9000;
 	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
 	private static final int bytesPerShort = Short.SIZE / Byte.SIZE;
 	private static final int bytesPerInt = Integer.SIZE / Byte.SIZE;
@@ -27,16 +27,17 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	public float viewWidth, viewHeight;
 	public float screenWidth, screenHeight;
 	
+	private long startTime;
+	
 	private FPSAnimator animator;
 	
 	private boolean didInit = false;
-	private long totalDrawTime = 0;
 	private long numDrawIterations = 0;
 	
 	JFrame the_frame;
 	DirtGeometry geometry;
 	
-	private static final int NUM_THINGS = 100000;
+	private static final int NUM_THINGS = 1000000;
 	
 	float[] position = new float[NUM_THINGS*2];
 	
@@ -190,11 +191,25 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 			return;
 		}
 		
-		//long startDrawTime = System.currentTimeMillis();
+		if(startTime == 0)
+		{
+			startTime = System.currentTimeMillis();
+		}
 		final GL2 gl = d.getGL().getGL2();
        
 		gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
 		
+		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
+	    ByteBuffer textureBuffer = gl.glMapBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_WRITE_ONLY);
+	    FloatBuffer textureFloatBuffer = textureBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
+	    
+	    for(int i = 0; i < position.length; i++)
+	    {
+	    	textureFloatBuffer.put(position[i]);
+	    }
+	    
+	    gl.glUnmapBuffer(GL2.GL_TEXTURE_BUFFER);
+	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
 		
 		// If we were drawing any other buffers here we'd need to set this every time
 		// but instead we just leave them bound after initialization, saves a little render time
@@ -213,18 +228,19 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
 		gl.glUniform1i(batchIndexAttribute, i);
 		// Get the remainder that didn't fit perfectly into a batch
-		//_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
+		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
 
 		gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
 		
-		//totalDrawTime += System.currentTimeMillis() - startDrawTime;
-		//numDrawIterations ++;
-		//if(numDrawIterations > 10)
-		//{
-			//System.out.println(totalDrawTime / numDrawIterations);
-		//	totalDrawTime = 0;
-		//	numDrawIterations = 0;
-		//}
+		
+		numDrawIterations ++;
+		if(numDrawIterations > 10)
+		{
+			long totalDrawTime = System.currentTimeMillis() - startTime;
+			System.out.println(totalDrawTime / numDrawIterations);
+			startTime = 0;
+			numDrawIterations = 0;
+		}
 		
 	}
 	
