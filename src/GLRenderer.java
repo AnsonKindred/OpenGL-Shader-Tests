@@ -24,13 +24,13 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private FPSAnimator animator;
 	
 	private boolean didInit = false;
-	private long totalDrawTime = 0;
+	private long startDrawTime = 0;
 	private long numDrawIterations = 0;
 	
 	JFrame the_frame;
 	DirtGeometry geometry;
 	
-	private static final int NUM_THINGS = 100000;
+	private static final int NUM_THINGS = 1000000;
 	
 	float[] position = new float[NUM_THINGS*2];
 	
@@ -114,7 +114,10 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	public void display(GLAutoDrawable d)
 	{
-		long startDrawTime = System.currentTimeMillis();
+		if(numDrawIterations == 0)
+		{
+			startDrawTime = System.currentTimeMillis();
+		}
 		final GL2 gl = d.getGL().getGL2();
 		
 		gl.glUseProgram(shaderProgram);
@@ -128,12 +131,11 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 			_render(gl, geometry, position[i*2], position[i*2+1]);
 		}
 		
-		totalDrawTime += System.currentTimeMillis() - startDrawTime;
 		numDrawIterations ++;
-		if(numDrawIterations > 10)
+		if(numDrawIterations > 1)
 		{
+			long totalDrawTime = System.currentTimeMillis() - startDrawTime;
 			System.out.println(totalDrawTime / numDrawIterations);
-			totalDrawTime = 0;
 			numDrawIterations = 0;
 		}
 	}
@@ -167,7 +169,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		Matrix.pushMV3f();
 		Matrix.translate2f(x, y);
 		
-		if (geometry.vertexBufferID != currentlyBoundBuffer)
+		/*if (geometry.vertexBufferID != currentlyBoundBuffer)
 		{
 			if (geometry.vertexBufferID == 0)
 			{
@@ -177,7 +179,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 			gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 			gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 			currentlyBoundBuffer = geometry.vertexBufferID;
-		}
+		}*/
 	    
         gl.glUniformMatrix3fv(mvpAttribute, 1, false, Matrix.multiply3f(Matrix.projection3f, Matrix.model_view3f), 0);
         

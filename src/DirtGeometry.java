@@ -27,15 +27,13 @@ public class DirtGeometry extends Geometry
 	
 	public void buildGeometry(float viewWidth, float viewHeight)
 	{
-		vertices = new float[4 * 2];
+		vertices = new float[3 * 2];
 		vertices[0] = -width/2;
 		vertices[1] = -height/2;
 		vertices[2] = -width/2;
 		vertices[3] = height/2;
 		vertices[4] = width/2;
 		vertices[5] = height/2;
-		vertices[6] = width/2;
-		vertices[7] = -height/2;
 		
 		drawMode = GL2.GL_POLYGON;
 	}
