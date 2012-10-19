@@ -10,15 +10,16 @@ varying vec4 color;
 
 float positionFetch(int index)
 {
-	int item_index = int(index/4);
-	int component_index = index%4;
-    float value = texelFetchBuffer(positionSampler, item_index)[component_index];
+	int real_index = index / 4;
+	int component = index % 4;
+    float value = texelFetch(positionSampler, real_index)[component];
+    
     return value;
 }
 
 void main(void)  
 { 
-	color = vertex_color;  
-	vec3 real_position = vec3(vertex.x + positionFetch((batchIndex*batchSize + int(vertex.z))*2), vertex.y + positionFetch((batchIndex*batchSize + int(vertex.z))*2+1), 1); 
+	color = vec4(1, 1, 1, 1);  
+	vec3 real_position = vec3(vertex.x + positionFetch((0 + int(vertex.z))*2), vertex.y + positionFetch((0 + int(vertex.z))*2+1), 1); 
 	gl_Position = vec4(projection * real_position, 1); 
 }

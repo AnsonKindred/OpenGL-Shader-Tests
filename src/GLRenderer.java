@@ -12,6 +12,7 @@ import javax.media.opengl.GLProfile;
 import javax.media.opengl.awt.GLCanvas;
 import javax.swing.JFrame;
 
+import com.jogamp.common.nio.PointerBuffer;
 import com.jogamp.opengl.util.FPSAnimator;
 
 public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
@@ -19,28 +20,44 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	private static final long serialVersionUID = -8513201172428486833L;
 	
-	private static final int BATCH_SIZE = 10000;
 	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
-	private static final int bytesPerShort = Short.SIZE / Byte.SIZE;
+	private static final int bytesPerInt   = Integer.SIZE / Byte.SIZE;
 	
 	public float viewWidth, viewHeight;
-	public float screenWidth, screenHeight;
 	
 	private FPSAnimator animator;
 	
 	private boolean didInit = false;
-	private long totalDrawTime = 0;
-	private long numDrawIterations = 0;
 	
 	JFrame the_frame;
-	DirtGeometry geometry;
 	
+	// Thought power of 2 might be required, doesn't seem to make a difference
 	private static final int NUM_THINGS = 100000;
+	private static final float THING_SIZE = .1f;
 	
-	float[] position = new float[NUM_THINGS*2];
+	private int batchSize = 1;
 	
 	// Shader attributes
-	private int shaderProgram, projectionAttribute, vertexAttribute, positionAttribute, batchSizeAttribute, batchIndexAttribute;
+	private int shaderProgram, projectionAttribute, vertexAttribute, positionAttribute;
+	
+	// vertices is just a single instance. 4 vertexes with 2 components each
+	float[] vertices = {
+			-THING_SIZE/2, -THING_SIZE/2,
+			-THING_SIZE/2, THING_SIZE/2,
+			THING_SIZE/2, THING_SIZE/2,
+			THING_SIZE/2, -THING_SIZE/2
+		};
+	
+	// positions holds the current x,y position of every instance
+	float[] positions = new float[NUM_THINGS*2];
+	
+	int vertexBufferID = 0;
+	int indexBufferID = 0;
+	int positionBufferID = 0;
+	int positionTextureID = 0;
+	
+	IntBuffer countBuffer;
+	PointerBuffer offsetBuffer;
 	
 	public static void main(String[] args) 
     {
@@ -67,67 +84,118 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	// Called by the drivers when the gl context is first made available
 	public void init(GLAutoDrawable d)
-	{		
+	{
 		final GL2 gl = d.getGL().getGL2();
 		
+		IntBuffer asd = IntBuffer.allocate(1);
+		gl.glGetIntegerv(GL2.GL_MAX_TEXTURE_SIZE, asd);
+		batchSize = asd.get(0)/Float.SIZE;
+		System.out.println("Batch size: " + batchSize);
+
 		shaderProgram = ShaderLoader.compileProgram(gl, "default");
-        gl.glLinkProgram(shaderProgram);
-		gl.glUseProgram(shaderProgram);
-		
+        
+		gl.glLinkProgram(shaderProgram);
+
         _getShaderAttributes(gl);
         
-        _checkGLCapabilities(gl);
-		_initGLSettings(gl);
-		
-		// Calculate batch of vertex data from dirt geometry
-		geometry = DirtGeometry.getInstance(.1f);
-		geometry.buildGeometry(viewWidth, viewHeight);
-		geometry.finalizeGeometry(BATCH_SIZE);
-	    
-	    geometry.vertexBufferID = _generateBufferID(gl);
-		_loadVertexBuffer(gl, geometry);
-		
-		geometry.indexBufferID = _generateBufferID(gl);
-		_loadIndexBuffer(gl, geometry);
-		
-		geometry.positionBufferID = _generateBufferID(gl);
-	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
+		gl.glUseProgram(shaderProgram);
 
-	    // initialize buffer object
-	    int size = NUM_THINGS * 2 * bytesPerFloat;
-	    gl.glBufferData(GL2.GL_TEXTURE_BUFFER, size, null, GL2.GL_DYNAMIC_DRAW);
-	    
-	    // Pretty sure this points the texture sampler at the buffer or something
-	    IntBuffer bla = IntBuffer.allocate(1);
-	    gl.glGenTextures(1, bla);
-	    geometry.positionTextureID = bla.get(0);
-	    gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
-	    gl.glTexBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_RGBA32F, geometry.positionBufferID);
-	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
-	    
-	    gl.glActiveTexture(GL2.GL_TEXTURE0);
-	    gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
-	}
-	
-	private void _initGLSettings(GL2 gl)
-	{
 		gl.glClearColor(0f, 0f, 0f, 1f);
+		gl.glDisableClientState(GL2.GL_TEXTURE_COORD_ARRAY);
+		gl.glDisableClientState(GL2.GL_NORMAL_ARRAY);
 	}
 	
-	private void _loadIndexBuffer(GL2 gl, Geometry geometry)
+	public void loadBuffers(GL2 gl)
 	{
-	    gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
-	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, bytesPerShort*BATCH_SIZE*geometry.getNumPoints(), geometry.indexBuffer, GL2.GL_STATIC_DRAW);
-	}
-	
-	private void _loadVertexBuffer(GL2 gl, Geometry geometry)
-	{
-	    int numBytes = geometry.getNumPoints() * 3 * bytesPerFloat * BATCH_SIZE;
+        int total_num_vertices = NUM_THINGS * 4;
+        
+        // initialize vertex Buffer (# of coordinate values * 4 bytes per float)  
+		ByteBuffer vbb = ByteBuffer.allocateDirect(total_num_vertices * 3 * Float.SIZE);
+		vbb.order(ByteOrder.nativeOrder());
+        FloatBuffer vertexBuffer = vbb.asFloatBuffer();
+        
+		for(int i = 0; i < NUM_THINGS; i++)
+		{
+			for(int v = 0; v < 4; v++)
+			{
+				int vertex_index = v * 2;
+				vertexBuffer.put(vertices[vertex_index]);
+				vertexBuffer.put(vertices[vertex_index+1]);
+				vertexBuffer.put(i);
+			}
+		}
+        vertexBuffer.rewind();
 	    
-		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
-	    gl.glEnableVertexAttribArray(vertexAttribute);
-	    gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+		// Load vertex data
+	    vertexBufferID = _generateBufferID(gl);
+	    // 4 points per instance, 3 components per point (x, y, i)
+	    int numBytes = 4 * 3 * bytesPerFloat * NUM_THINGS;
+		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, vertexBufferID);
+			gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, vertexBuffer, GL2.GL_STATIC_DRAW);
+		    gl.glEnableVertexAttribArray(vertexAttribute);
+		    gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+	    //gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, 0);
+	    
+	    // Create the indices
+	    vbb = ByteBuffer.allocateDirect(total_num_vertices * Integer.SIZE);
+		vbb.order(ByteOrder.nativeOrder());
+		IntBuffer indexBuffer = vbb.asIntBuffer();
+	    for(int i = 0; i < total_num_vertices; i++)
+	    {
+	    	indexBuffer.put(i);
+	    }
+	    indexBuffer.rewind();
+		
+	    // Load the index buffer
+		indexBufferID = _generateBufferID(gl);
+		gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+	    	gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, bytesPerInt*NUM_THINGS*4, indexBuffer, GL2.GL_STATIC_DRAW);
+	    //gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, 0);
+	    	
+    	// Create the count buffer
+	    vbb = ByteBuffer.allocateDirect(NUM_THINGS * Integer.SIZE);
+		vbb.order(ByteOrder.nativeOrder());
+		countBuffer = vbb.asIntBuffer();
+	    for(int i = 0; i < total_num_vertices; i++)
+	    {
+	    	countBuffer.put(4);
+	    }
+	    countBuffer.rewind();
+	    
+		// create the offset buffer
+	    offsetBuffer = PointerBuffer.allocateDirect(NUM_THINGS);
+	    for(int i = 0; i < NUM_THINGS; i++)
+	    {
+	    	offsetBuffer.put(i*4*bytesPerFloat);
+	    }
+	    offsetBuffer.rewind();
+
+	    // Point the positionSampler in the vertex shader at TEXTURE0
+	    gl.glUniform1i(positionAttribute, 0);
+	    gl.glActiveTexture(GL2.GL_TEXTURE0);
+	    
+	    // Set up the position buffer
+		positionBufferID = _generateBufferID(gl);
+	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, positionBufferID);
+		    // Load position data into a buffer
+			vbb = ByteBuffer.allocateDirect(positions.length * Float.SIZE);
+			vbb.order(ByteOrder.nativeOrder());
+			FloatBuffer positionBuffer = vbb.asFloatBuffer();
+			positionBuffer.put(positions);
+			positionBuffer.rewind();
+			
+			// Load buffer into gl texture buffer
+			gl.glBufferData(GL2.GL_TEXTURE_BUFFER, positions.length*bytesPerFloat, positionBuffer, GL2.GL_STATIC_DRAW);
+			
+			IntBuffer bla = IntBuffer.allocate(1);
+		    gl.glGenTextures(1, bla);
+		    positionTextureID = bla.get(0);
+	
+	        gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, positionTextureID);
+		    	gl.glTexBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_RGBA32F, positionBufferID);
+		    //gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
+	    //gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
+	    
 	}
 	
 	private int _generateBufferID(GL2 gl)
@@ -138,22 +206,11 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		return bufferIDBuffer.get(0);
 	}
 	
-	private void _checkGLCapabilities(GL2 gl)
-	{
-		// TODO: Respond to this information in a meaningful way.
-		boolean VBOsupported = gl.isFunctionAvailable("glGenBuffersARB") && gl.isFunctionAvailable("glBindBufferARB")
-				&& gl.isFunctionAvailable("glBufferDataARB") && gl.isFunctionAvailable("glDeleteBuffersARB");
-		
-		System.out.println("VBO Supported: " + VBOsupported);
-	}
-	
 	private void _getShaderAttributes(GL2 gl)
 	{
         vertexAttribute = gl.glGetAttribLocation(shaderProgram, "vertex");
         projectionAttribute = gl.glGetUniformLocation(shaderProgram, "projection");
         positionAttribute = gl.glGetUniformLocation(shaderProgram, "positionSampler");
-        batchSizeAttribute = gl.glGetUniformLocation(shaderProgram, "batchSize");
-        batchIndexAttribute = gl.glGetUniformLocation(shaderProgram, "batchIndex");
 	}
 	
 	// Called by me on the first resize call, useful for things that can't be initialized until the screen size is known
@@ -161,71 +218,44 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	{
 		for(int i = 0; i < NUM_THINGS; i++)
 		{
-			position[i*2] = (float) (Math.random()*viewWidth);
-			position[i*2+1] = (float) (Math.random()*viewHeight);
+			positions[i*2] = (float) (Math.random()*viewWidth);
+			positions[i*2+1] = (float) (Math.random()*viewHeight);
 		}
 		
+		loadBuffers(gl);
+		
 		gl.glUniformMatrix3fv(projectionAttribute, 1, false, Matrix.projection3f, 0);
-		gl.glUniform1i(batchSizeAttribute, BATCH_SIZE);
-		// Load position data into a texture buffer
-		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
-	    ByteBuffer textureBuffer = gl.glMapBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_WRITE_ONLY);
-	    FloatBuffer textureFloatBuffer = textureBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
-	    
-	    for(int i = 0; i < position.length; i++)
-	    {
-	    	textureFloatBuffer.put(position[i]);
-	    }
-	    
-	    gl.glUnmapBuffer(GL2.GL_TEXTURE_BUFFER);
-	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
 	}
 	
 	public void display(GLAutoDrawable d)
 	{
-
-		if (!didInit || geometry.vertexBufferID == 0)
-		{
-			return;
-		}
+		if (!didInit || vertexBufferID == 0) return;
 		
-		//long startDrawTime = System.currentTimeMillis();
 		final GL2 gl = d.getGL().getGL2();
        
 		gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
+
+		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, 0);
+		gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, indexBufferID);
+		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, positionBufferID);
+		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
 		
-		
-		// If we were drawing any other buffers here we'd need to set this every time
-		// but instead we just leave them bound after initialization, saves a little render time
-		//gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-		//gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
-		//gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
-		
-	    int i = 0;
-		for(; i < NUM_THINGS/BATCH_SIZE; i++)
+		// This works, but is very much not what I want
+		for(int i = 0; i < NUM_THINGS; i++)
 		{
-			gl.glUniform1i(batchIndexAttribute, i);
-			_renderBatch(gl, geometry, i*BATCH_SIZE, BATCH_SIZE);
+			// If I comment in the two glBindTexture lines it works
+			gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
+			gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, positionTextureID);
+			gl.glDrawElements(GL2.GL_POLYGON, 4, GL2.GL_UNSIGNED_INT, i*4*bytesPerInt);
 		}
-		gl.glUniform1i(batchIndexAttribute, i);
-		// Get the remainder that didn't fit perfectly into a batch
-		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
 		
-		//totalDrawTime += System.currentTimeMillis() - startDrawTime;
-		//numDrawIterations ++;
-		//if(numDrawIterations > 10)
-		//{
-			//System.out.println(totalDrawTime / numDrawIterations);
-		//	totalDrawTime = 0;
-		//	numDrawIterations = 0;
-		//}
+		// This also works, but obviously isn't what I want
+		//gl.glDrawElements(GL2.GL_POINTS, NUM_THINGS*4, GL2.GL_UNSIGNED_INT, 0);
 		
-	}
-	
-	public void _renderBatch(GL2 gl, Geometry geometry, int offset, int count)
-	{
-		//gl.glUniform1fv(positionAttribute, count*2, position, offset*2);
-		gl.glMultiDrawElements(geometry.drawMode, geometry.countBuffer, GL2.GL_UNSIGNED_SHORT, geometry.offsetBuffer, count);
+		// This does not work, and is what I want
+		//gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, positionTextureID);
+		//gl.glMultiDrawElements(GL2.GL_LINE_LOOP, countBuffer, GL2.GL_UNSIGNED_INT, offsetBuffer, NUM_THINGS);
+		//gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
 	}
 	
 	public void reshape(GLAutoDrawable d, int x, int y, int width, int height)
@@ -234,8 +264,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		gl.glViewport(0, 0, width, height);
 		float ratio = (float) height / width;
 		
-		screenWidth = width;
-		screenHeight = height;
 		viewWidth = 100;
 		viewHeight = viewWidth * ratio;
 		
@@ -245,34 +273,14 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		{
 			viewInit(gl);
 			didInit = true;
-		} 
-		else
-		{
-			// respond to view size changing
 		}
 	}
 	
-	public void screenToViewCoords(float[] xy)
-	{
-		float viewX = (xy[0] / screenWidth) * viewWidth;
-		float viewY = viewHeight - (xy[1] / screenHeight) * viewHeight;
-		xy[0] = viewX;
-		xy[1] = viewY;
-	}
-	
 	@Override
-	public void dispose(GLAutoDrawable drawable){}
-	
-	public float getViewWidth()
+	public void dispose(GLAutoDrawable d)
 	{
-		return viewWidth;
+		final GL2 gl = d.getGL().getGL2();
 	}
-	
-	public float getViewHeight()
-	{
-		return viewHeight;
-	}
-
 
 	@Override
 	public void windowClosing(WindowEvent arg0)
