@@ -16,12 +16,12 @@ import com.jogamp.opengl.util.FPSAnimator;
 
 public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
 {
+	private static final int NUM_THINGS = 1000000;
 	
-	private static final long serialVersionUID = -8513201172428486833L;
-	
-	private int BATCH_SIZE = 10;
 	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
 	private static final int bytesPerInt = Integer.SIZE / Byte.SIZE;
+
+	private int batchSize = 10;
 	
 	public float viewWidth, viewHeight;
 	public float screenWidth, screenHeight;
@@ -35,8 +35,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	JFrame the_frame;
 	DirtGeometry geometry;
-	
-	private static final int NUM_THINGS = 180000000;
 	
 	float[] position = new float[NUM_THINGS*2];
 	
@@ -55,8 +53,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		long heapFreeSize = Runtime.getRuntime().freeMemory();
 		// Just to be safe, we won't use more than half of the available heap
-		BATCH_SIZE = (int) (Math.min((heapFreeSize/2)/(Float.SIZE*9), NUM_THINGS));
-		System.out.println("Dynamic batch size: " + BATCH_SIZE);
+		batchSize = (int) (Math.min((heapFreeSize/2)/(Float.SIZE*9), NUM_THINGS));
+		System.out.println("Dynamic batch size: " + batchSize);
 		
 		addGLEventListener(this);
 		setSize(1800, 1000);
@@ -83,12 +81,11 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
         _getShaderAttributes(gl);
         
         _checkGLCapabilities(gl);
-		_initGLSettings(gl);
 		
 		// Calculate batch of vertex data from dirt geometry
 		geometry = DirtGeometry.getInstance(.1f);
 		geometry.buildGeometry(viewWidth, viewHeight);
-		geometry.finalizeGeometry(BATCH_SIZE);
+		geometry.finalizeGeometry(batchSize);
 	    
 	    geometry.vertexBufferID = _generateBufferID(gl);
 		_loadVertexBuffer(gl, geometry);
@@ -99,51 +96,41 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		geometry.indexBuffer = null;
 		
 		geometry.positionBufferID = _generateBufferID(gl);
-	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
+		_preparePositionBuffer(gl, geometry);
+		
+		gl.glClearColor(0f, 0f, 0f, 1f);
+	}
+	
+	private void _preparePositionBuffer(GL2 gl, Geometry geometry)
+	{
+		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
 
+	    // Make sure the position sampler is bound to TEXTURE0
+	    gl.glUniform1f(positionAttribute, 0);
+	    gl.glActiveTexture(GL2.GL_TEXTURE0);
+	    
 	    // initialize buffer object
 	    int size = NUM_THINGS * 2 * bytesPerFloat;
 	    gl.glBufferData(GL2.GL_TEXTURE_BUFFER, size, null, GL2.GL_DYNAMIC_DRAW);
 	    
-	    // Pretty sure this points the texture sampler at the buffer or something
-	    IntBuffer bla = IntBuffer.allocate(1);
-	    gl.glGenTextures(1, bla);
-	    geometry.positionTextureID = bla.get(0);
-	    gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
+	    // The fucking magic, point the active texture at the position buffer
 	    gl.glTexBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_RGBA32F, geometry.positionBufferID);
-	    gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, 0);
-	    
-	    gl.glActiveTexture(GL2.GL_TEXTURE0);
-	    gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
-	}
-	
-	private void _initGLSettings(GL2 gl)
-	{
-		gl.glClearColor(0f, 0f, 0f, 1f);
 	}
 	
 	private void _loadIndexBuffer(GL2 gl, Geometry geometry)
 	{
 	    gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
-	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, bytesPerInt*BATCH_SIZE*geometry.getNumPoints(), geometry.indexBuffer, GL2.GL_STATIC_DRAW);
+	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, bytesPerInt*batchSize*geometry.getNumPoints(), geometry.indexBuffer, GL2.GL_STATIC_DRAW);
 	}
 	
 	private void _loadVertexBuffer(GL2 gl, Geometry geometry)
 	{
-	    int numBytes = geometry.getNumPoints() * 3 * bytesPerFloat * BATCH_SIZE;
-	    System.out.println(numBytes);
+	    int numBytes = geometry.getNumPoints() * 3 * bytesPerFloat * batchSize;
+	    
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
 		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, geometry.vertexBuffer, GL2.GL_STATIC_DRAW);
 	    gl.glEnableVertexAttribArray(vertexAttribute);
 	    gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
-	}
-	
-	private int _generateBufferID(GL2 gl)
-	{
-		IntBuffer bufferIDBuffer = IntBuffer.allocate(1);
-		gl.glGenBuffers(1, bufferIDBuffer);
-		
-		return bufferIDBuffer.get(0);
 	}
 	
 	private void _checkGLCapabilities(GL2 gl)
@@ -174,7 +161,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		}
 		
 		gl.glUniformMatrix3fv(projectionAttribute, 1, false, Matrix.projection3f, 0);
-		gl.glUniform1i(batchSizeAttribute, BATCH_SIZE);
+		gl.glUniform1i(batchSizeAttribute, batchSize);
 		
 		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
 	    ByteBuffer textureBuffer = gl.glMapBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_WRITE_ONLY);
@@ -207,24 +194,21 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, geometry.positionBufferID);
 	    ByteBuffer textureBuffer = gl.glMapBuffer(GL2.GL_TEXTURE_BUFFER, GL2.GL_WRITE_ONLY);
 	    FloatBuffer textureFloatBuffer = textureBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
-	    
-	    for(int i = 0; i < position.length; i++)
+	    int i;
+	    for(i = 0; i < position.length; i++)
 	    {
 	    	textureFloatBuffer.put(position[i]);
 	    }
-	    
 	    gl.glUnmapBuffer(GL2.GL_TEXTURE_BUFFER);
 		
-	    int i = 0;
-		for(; i < NUM_THINGS/BATCH_SIZE; i++)
+	    for(i = 0; i < NUM_THINGS/batchSize; i++)
 		{
 			gl.glUniform1i(batchIndexAttribute, i);
-			_renderBatch(gl, geometry, i*BATCH_SIZE, BATCH_SIZE);
+			_renderBatch(gl, geometry, i*batchSize, batchSize);
 		}
-		gl.glUniform1i(batchIndexAttribute, i);
 		// Get the remainder that didn't fit perfectly into a batch
-		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);;
-		
+		gl.glUniform1i(batchIndexAttribute, i);
+		_renderBatch(gl, geometry, i*batchSize, NUM_THINGS - i*batchSize);
 		
 		numDrawIterations ++;
 		if(numDrawIterations > 1)
@@ -234,7 +218,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 			startTime = 0;
 			numDrawIterations = 0;
 		}
-		
 	}
 	
 	public void _renderBatch(GL2 gl, Geometry geometry, int offset, int count)
@@ -255,14 +238,10 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		Matrix.ortho3f(0, viewWidth, 0, viewHeight);
 		
-		if (!didInit)
+		if(!didInit)
 		{
 			viewInit(gl);
 			didInit = true;
-		} 
-		else
-		{
-			// respond to view size changing
 		}
 	}
 	
@@ -274,9 +253,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		xy[1] = viewY;
 	}
 	
-	@Override
-	public void dispose(GLAutoDrawable drawable){}
-	
 	public float getViewWidth()
 	{
 		return viewWidth;
@@ -286,7 +262,14 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	{
 		return viewHeight;
 	}
-
+	
+	private int _generateBufferID(GL2 gl)
+	{
+		IntBuffer bufferIDBuffer = IntBuffer.allocate(1);
+		gl.glGenBuffers(1, bufferIDBuffer);
+		
+		return bufferIDBuffer.get(0);
+	}
 
 	@Override
 	public void windowClosing(WindowEvent arg0)
@@ -307,4 +290,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	public void windowActivated(WindowEvent arg0){}
 	@Override
 	public void windowClosed(WindowEvent arg0){}
+	@Override
+	public void dispose(GLAutoDrawable drawable){}
 }

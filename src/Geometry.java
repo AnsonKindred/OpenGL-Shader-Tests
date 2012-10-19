@@ -16,7 +16,6 @@ public class Geometry
 	public int vertexBufferID = 0;
 	public int indexBufferID = 0;
 	public int positionBufferID = 0;
-	public int positionTextureID = 0;
 	
 	public int drawMode;
 
