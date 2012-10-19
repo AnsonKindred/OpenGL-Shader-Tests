@@ -13,7 +13,7 @@ public class Geometry
 {
 	public float[] vertices = null;
 	
-	ShortBuffer indexBuffer;
+	IntBuffer indexBuffer;
 	IntBuffer countBuffer;
 	PointerBuffer offsetBuffer;
 	FloatBuffer vertexBuffer;
@@ -82,9 +82,9 @@ public class Geometry
         vertexBuffer.rewind();
 	    
 	    // Create the indices
-	    vbb = ByteBuffer.allocateDirect(total_num_vertices * Short.SIZE);
+	    vbb = ByteBuffer.allocateDirect(total_num_vertices * Integer.SIZE);
 		vbb.order(ByteOrder.nativeOrder());
-		indexBuffer = vbb.asShortBuffer();
+		indexBuffer = vbb.asIntBuffer();
 		
 	    for(int i = 0; i < total_num_vertices; i++)
 	    {
@@ -106,7 +106,7 @@ public class Geometry
 	    offsetBuffer = PointerBuffer.allocateDirect(numInstances);
 	    for(int i = 0; i < numInstances; i++)
 	    {
-	    	offsetBuffer.put(num_vertices*i*2);
+	    	offsetBuffer.put(num_vertices*i*Integer.SIZE/Byte.SIZE);
 	    }
 	    offsetBuffer.rewind();
 	}

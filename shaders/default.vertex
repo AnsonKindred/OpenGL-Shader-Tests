@@ -12,7 +12,7 @@ float positionFetch(int index)
 {
 	int item_index = int(index/4);
 	int component_index = index%4;
-    float value = texelFetchBuffer(positionSampler, item_index)[component_index];
+    float value = texelFetch(positionSampler, item_index)[component_index];
     return value;
 }
 

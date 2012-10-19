@@ -19,9 +19,10 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	private static final long serialVersionUID = -8513201172428486833L;
 	
-	private static final int BATCH_SIZE = 10000;
+	private static final int BATCH_SIZE = 64;
 	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
 	private static final int bytesPerShort = Short.SIZE / Byte.SIZE;
+	private static final int bytesPerInt = Integer.SIZE / Byte.SIZE;
 	
 	public float viewWidth, viewHeight;
 	public float screenWidth, screenHeight;
@@ -117,7 +118,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private void _loadIndexBuffer(GL2 gl, Geometry geometry)
 	{
 	    gl.glBindBuffer(GL2.GL_ELEMENT_ARRAY_BUFFER, geometry.indexBufferID);
-	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, bytesPerShort*BATCH_SIZE*geometry.getNumPoints(), geometry.indexBuffer, GL2.GL_STATIC_DRAW);
+	    gl.glBufferData(GL2.GL_ELEMENT_ARRAY_BUFFER, bytesPerInt*BATCH_SIZE*geometry.getNumPoints(), geometry.indexBuffer, GL2.GL_STATIC_DRAW);
 	}
 	
 	private void _loadVertexBuffer(GL2 gl, Geometry geometry)
@@ -205,11 +206,16 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		for(; i < NUM_THINGS/BATCH_SIZE; i++)
 		{
 			gl.glUniform1i(batchIndexAttribute, i);
+			gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
 			_renderBatch(gl, geometry, i*BATCH_SIZE, BATCH_SIZE);
+			gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
 		}
+		gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, geometry.positionTextureID);
 		gl.glUniform1i(batchIndexAttribute, i);
 		// Get the remainder that didn't fit perfectly into a batch
-		_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
+		//_renderBatch(gl, geometry, i*BATCH_SIZE, NUM_THINGS - i*BATCH_SIZE);
+
+		gl.glBindTexture(GL2.GL_TEXTURE_BUFFER, 0);
 		
 		//totalDrawTime += System.currentTimeMillis() - startDrawTime;
 		//numDrawIterations ++;
@@ -225,7 +231,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	public void _renderBatch(GL2 gl, Geometry geometry, int offset, int count)
 	{
 		//gl.glUniform1fv(positionAttribute, count*2, position, offset*2);
-		gl.glMultiDrawElements(geometry.drawMode, geometry.countBuffer, GL2.GL_UNSIGNED_SHORT, geometry.offsetBuffer, count);
+		gl.glMultiDrawElements(geometry.drawMode, geometry.countBuffer, GL2.GL_UNSIGNED_INT, geometry.offsetBuffer, count);
 	}
 	
 	public void reshape(GLAutoDrawable d, int x, int y, int width, int height)
