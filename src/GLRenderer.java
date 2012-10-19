@@ -16,7 +16,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	private static final long serialVersionUID = -8513201172428486833L;
 	
-	private static final int BATCH_SIZE = 1024;
+	private static final int BATCH_SIZE = 9000;
 	private static final int bytesPerFloat = Float.SIZE / Byte.SIZE;
 	
 	public float viewWidth, viewHeight;
@@ -31,7 +31,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	JFrame the_frame;
 	DirtGeometry geometry;
 	
-	private static final int NUM_THINGS = 100000;
+	private static final int NUM_THINGS = 1000000;
 	
 	float[] position = new float[NUM_THINGS*2];
 	
@@ -176,7 +176,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		totalDrawTime += System.currentTimeMillis() - startDrawTime;
 		numDrawIterations ++;
-		if(numDrawIterations > 10)
+		if(numDrawIterations > 100)
 		{
 			System.out.println(totalDrawTime / numDrawIterations);
 			totalDrawTime = 0;
