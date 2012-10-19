@@ -104,7 +104,7 @@ public class Geometry
 	    offsetBuffer = PointerBuffer.allocateDirect(numInstances);
 	    for(int i = 0; i < numInstances; i++)
 	    {
-	    	offsetBuffer.put(num_vertices*i*2);
+	    	offsetBuffer.put(num_vertices*i*Short.SIZE/Byte.SIZE);
 	    }
 	    offsetBuffer.rewind();
 	}
