@@ -1,7 +1,6 @@
- import java.awt.event.WindowEvent;
+import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.nio.IntBuffer;
-
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.GLCapabilities;
 import javax.media.opengl.GL2;
@@ -9,17 +8,13 @@ import javax.media.opengl.GLEventListener;
 import javax.media.opengl.GLProfile;
 import javax.media.opengl.awt.GLCanvas;
 import javax.swing.JFrame;
-
 import com.jogamp.opengl.util.FPSAnimator;
 
 public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
 {
+	private static final int NUM_THINGS = 100000;
 	
-	private static final long serialVersionUID = -8513201172428486833L;
 	public float viewWidth, viewHeight;
-	public float screenWidth, screenHeight;
-	
-	private int currentlyBoundBuffer = 0;
 	
 	private FPSAnimator animator;
 	
@@ -30,12 +25,10 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	JFrame the_frame;
 	DirtGeometry geometry;
 	
-	private static final int NUM_THINGS = 1000000;
-	
-	float[] position = new float[NUM_THINGS*2];
+	float[] positions = new float[NUM_THINGS*2];
 	
 	// Shader attributes
-	private int shaderProgram, mvpAttribute, positionAttribute, colorAttribute;
+	private int shaderProgram, mvpAttribute, positionAttribute;
 	
 	public static void main(String[] args) 
     {
@@ -98,7 +91,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 	    gl.glEnableVertexAttribArray(positionAttribute);
 	    
-		currentlyBoundBuffer = geometry.vertexBufferID;
 		geometry.needsCompile = false;
 	}
 	
@@ -107,8 +99,8 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	{
 		for(int i = 0; i < NUM_THINGS; i++)
 		{
-			position[i*2] = (float) (Math.random()*viewWidth);
-			position[i*2+1] = (float) (Math.random()*viewWidth);
+			positions[i*2] = (float) (Math.random()*viewWidth);
+			positions[i*2+1] = (float) (Math.random()*viewWidth);
 		}
 	}
 	
@@ -124,11 +116,9 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
        
 		gl.glClear(GL2.GL_COLOR_BUFFER_BIT | GL2.GL_DEPTH_BUFFER_BIT);
 		
-		Matrix.loadIdentityMV3f();
-		
 		for(int i = 0; i < NUM_THINGS; i++)
 		{
-			_render(gl, geometry, position[i*2], position[i*2+1]);
+			_render(gl, geometry, positions[i*2], positions[i*2+1]);
 		}
 		
 		numDrawIterations ++;
@@ -146,54 +136,29 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		gl.glViewport(0, 0, width, height);
 		float ratio = (float) height / width;
 		
-		screenWidth = width;
-		screenHeight = height;
 		viewWidth = 100;
 		viewHeight = viewWidth * ratio;
 		
-		Matrix.ortho3f(0, viewWidth, 0, viewHeight);
+		Matrix3x3.ortho(0, viewWidth, 0, viewHeight);
 		
 		if (!didInit)
 		{
 			viewInit(gl);
 			didInit = true;
-		} 
-		else
-		{
-			// respond to view size changing
 		}
 	}
 	
 	public void _render(GL2 gl, Geometry geometry, float x, float y)
 	{
-		Matrix.pushMV3f();
-		Matrix.translate2f(x, y);
+		Matrix3x3.push();
 		
-		/*if (geometry.vertexBufferID != currentlyBoundBuffer)
-		{
-			if (geometry.vertexBufferID == 0)
-			{
-				return;
-			}
-			
-			gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, geometry.vertexBufferID);
-			gl.glVertexAttribPointer(positionAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
-			currentlyBoundBuffer = geometry.vertexBufferID;
-		}*/
+		Matrix3x3.translate(x, y);
 	    
-        gl.glUniformMatrix3fv(mvpAttribute, 1, false, Matrix.multiply3f(Matrix.projection3f, Matrix.model_view3f), 0);
+        gl.glUniformMatrix3fv(mvpAttribute, 1, false, Matrix3x3.getMatrix());
         
 		gl.glDrawArrays(geometry.drawMode, 0, geometry.getNumPoints());
 		
-		Matrix.popMV3f();
-	}
-	
-	public void screenToViewCoords(float[] xy)
-	{
-		float viewX = (xy[0] / screenWidth) * viewWidth;
-		float viewY = viewHeight - (xy[1] / screenHeight) * viewHeight;
-		xy[0] = viewX;
-		xy[1] = viewY;
+		Matrix3x3.pop();
 	}
 	
 	@Override
@@ -208,7 +173,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	{
 		return viewHeight;
 	}
-
 
 	@Override
 	public void windowClosing(WindowEvent arg0)

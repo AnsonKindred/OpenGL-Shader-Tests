@@ -44,7 +44,7 @@ public class Geometry
 		if(vertices == null) return;
         
         // initialize vertex Buffer (# of coordinate values * 4 bytes per float)  
-		ByteBuffer vbb = ByteBuffer.allocateDirect(vertices.length * Float.SIZE);
+		ByteBuffer vbb = ByteBuffer.allocateDirect(vertices.length * Float.SIZE / Byte.SIZE);
 		vbb.order(ByteOrder.nativeOrder());
         vertexBuffer = vbb.asFloatBuffer();
         // add the coordinates to the FloatBuffer
