@@ -15,8 +15,9 @@ import com.jogamp.opengl.util.FPSAnimator;
 
 public class GLRenderer extends GLCanvas implements GLEventListener, WindowListener
 {
-	static final int NUM_THINGS = 100000;
-	static final float SIZE = .05f;
+	static final int NUM_THINGS = 50000;
+	static final float SIZE = .1f;
+	static final float MAX_SPEED = .2f;
 	
 	static final int FLOAT_BYTES = Float.SIZE / Byte.SIZE;
 	
@@ -39,8 +40,9 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	// Interlaced x,y positions of each thing
 	float[] positions = new float[NUM_THINGS*2];
+	float[] velocities = new float[NUM_THINGS*2];
 	
-	// Always use VBOs
+	// Always use VBOs when possible
 	int vertexBufferID  = 0;
 	
 	// Shader attributes
@@ -49,13 +51,14 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	
 	public static void main(String[] args) 
     {
-		new GLRenderer();
+		GLCapabilities cap = new GLCapabilities(GLProfile.get(GLProfile.GL2));
+		new GLRenderer(cap);
     }
 	
-	public GLRenderer()
+	public GLRenderer(GLCapabilities cap)
 	{
 		// Standard setup stuff
-		super(new GLCapabilities(GLProfile.get(GLProfile.GL2)));
+		super(cap);
 		
 		addGLEventListener(this);
 		setSize(1800, 1000);
@@ -80,6 +83,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		final GL2 gl = d.getGL().getGL2();
         
 		gl.glClearColor(0f, 0f, 0f, 1f);
+	    gl.glEnableVertexAttribArray(vertexAttribute);
 		
 		shaderProgram = ShaderLoader.compileProgram(gl, "default");
         gl.glLinkProgram(shaderProgram);
@@ -88,33 +92,40 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
         vertexAttribute = gl.glGetAttribLocation(shaderProgram, "vertex");
         mvpAttribute    = gl.glGetUniformLocation(shaderProgram, "mvp");
 		
-        // Buffer lengths are in bytes
-	    int numBytes = vertices.length * FLOAT_BYTES;
+        _loadVertexData(gl);
 	    
-		// OpenGL prefers directly allocated buffers. 
-	    // They have improved performance over FloatBuffer.allocate and buffer.putFloat methods
+		gl.glUseProgram(shaderProgram);
+	}
+	
+	/**
+	 * Loads the vertex data into a buffer on the graphics card.
+	 * 
+	 * @param gl
+	 */
+	private void _loadVertexData(GL2 gl)
+	{
+		// Buffer lengths are in bytes
+	    int numBytes = vertices.length*FLOAT_BYTES;
 	    
-	    // Allocate a buffer to hold the vertices so that we can send them to the graphics card
-		ByteBuffer vbb = ByteBuffer.allocateDirect(numBytes).order(ByteOrder.nativeOrder());
-        FloatBuffer vertexBuffer = vbb.asFloatBuffer();
-        
-        // add the coordinates to the FloatBuffer
-        vertexBuffer.put(vertices);
-        // If you forget to rewind your buffers, you're gonna have a bad time
-        vertexBuffer.rewind();
-        
+		// Bind a buffer on the graphics card and load our vertexBuffer into it
         vertexBufferID = _generateBufferID(gl);
-		
-		// Bind the buffer on the graphics card and load our vertexBuffer into it
 		gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, vertexBufferID);
-		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, vertexBuffer, GL2.GL_STATIC_DRAW);
+		
+		// Allocate some space
+		gl.glBufferData(GL2.GL_ARRAY_BUFFER, numBytes, null, GL2.GL_STATIC_DRAW);
 		
 		// Tell OpenGL to use our vertexAttribute as _the_ vertex attribute in the shader and to use
 		// the currently bound buffer as the data source
 		gl.glVertexAttribPointer(vertexAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
-	    gl.glEnableVertexAttribArray(vertexAttribute);
-	    
-		gl.glUseProgram(shaderProgram);
+		
+		// Map the buffer so that we can insert some data
+		ByteBuffer vertexBuffer = gl.glMapBuffer(GL2.GL_ARRAY_BUFFER, GL2.GL_WRITE_ONLY);
+		FloatBuffer vertexFloatBuffer = vertexBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
+		
+        vertexFloatBuffer.put(vertices);
+        
+        gl.glUnmapBuffer(GL2.GL_ARRAY_BUFFER);
+	    gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, 0);
 	}
 	
 	/**
@@ -130,6 +141,9 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		{
 			positions[i*2] = (float) (Math.random()*viewWidth);
 			positions[i*2+1] = (float) (Math.random()*viewWidth);
+			
+			velocities[i*2] = (float) (Math.random()*MAX_SPEED*2 - MAX_SPEED);
+			velocities[i*2+1] = (float) (Math.random()*MAX_SPEED*2 - MAX_SPEED);
 		}
 	}
 	
@@ -150,6 +164,9 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		// Render all of the things
 		for(int i = 0; i < NUM_THINGS; i++)
 		{
+			positions[i*2] += velocities[i*2];
+			positions[i*2+1] += velocities[i*2+1];
+			
 			_render(gl, positions[i*2], positions[i*2+1]);
 		}
 		
@@ -219,16 +236,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	{
 		gl.glGenBuffers(1, idBuffer);
 		return idBuffer.get(0);
-	}
-	
-	public float getViewWidth()
-	{
-		return viewWidth;
-	}
-	
-	public float getViewHeight()
-	{
-		return viewHeight;
 	}
 
 	@Override

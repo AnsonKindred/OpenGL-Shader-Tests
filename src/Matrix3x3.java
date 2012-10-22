@@ -3,7 +3,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
 /**
- * Maintains model/view/projection matrix for transforming vertices in a scene.
+ * Maintains a matrix for transforming vertices in a scene.
  * Specialized for 2d transformations.
  * 
  * Seems to be a slight speed increase in using buffers instead of arrays
