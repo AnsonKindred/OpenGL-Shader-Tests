@@ -19,8 +19,8 @@ float positionFetch(int index)
 void main(void)  
 { 
 	// Since we are just transforming we don't need any fancy model/view matrix, just add to the vertex position
-	float x = vertex.x + positionFetch( int(vertex.z)*2 );
-	float y = vertex.y + positionFetch( int(vertex.z)*2 + 1);
+	float x = vertex.x + positionFetch( gl_InstanceID*2 );
+	float y = vertex.y + positionFetch( gl_InstanceID*2 + 1);
 	vec3 real_position = vec3(x, y, 1);
 	 
 	gl_Position = vec4(projection * real_position, 1); 

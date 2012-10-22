@@ -110,7 +110,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	private void _loadVertexData(GL2 gl)
 	{
         // Buffer lengths are in bytes
-	    int numBytes = 3*vertices.length*FLOAT_BYTES*NUM_THINGS/2;
+	    int numBytes = vertices.length*FLOAT_BYTES;
 	    
 		// Bind a buffer on the graphics card and load our vertexBuffer into it
         vertexBufferID = _generateBufferID(gl);
@@ -121,26 +121,15 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		// Tell OpenGL to use our vertexAttribute as _the_ vertex attribute in the shader and to use
 		// the currently bound buffer as the data source
-		gl.glVertexAttribPointer(vertexAttribute, 3, GL2.GL_FLOAT, false, 0, 0);
+		gl.glVertexAttribPointer(vertexAttribute, 2, GL2.GL_FLOAT, false, 0, 0);
 		
 		// Map the buffer so that we can insert some data
 		ByteBuffer vertexBuffer = gl.glMapBuffer(GL2.GL_ARRAY_BUFFER, GL2.GL_WRITE_ONLY);
 		// Do this rather than using 'putFloat' directly on vertexBuffer, it's faster
 		FloatBuffer vertexFloatBuffer = vertexBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
 		
-		// Add the vertices to the FloatBuffer
-		// The z-component is used to store an index that the shader will use to 
-		// look up the position for each vertex
-        for(int i = 0; i < NUM_THINGS; i++)
-        {
-        	for(int v = 0; v < vertices.length; v+=2)
-            {
-        		vertexFloatBuffer.put(vertices[v]);
-        		vertexFloatBuffer.put(vertices[v+1]);
-        		vertexFloatBuffer.put(i); // the index
-            }
-        }
-        
+		vertexFloatBuffer.put(vertices);
+		
         gl.glUnmapBuffer(GL2.GL_ARRAY_BUFFER);
 	    gl.glBindBuffer(GL2.GL_ARRAY_BUFFER, 0);
 	}
@@ -220,7 +209,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		_updatePositions(gl);
 
 		// Render all of the things
-		gl.glDrawArrays(GL2.GL_TRIANGLES, 0, NUM_THINGS*3);
+		gl.glDrawArraysInstanced(GL2.GL_TRIANGLES, 0, 3, NUM_THINGS);
 		
 		numDrawIterations++;
 		if(numDrawIterations > 100)
