@@ -6,6 +6,6 @@
 	<classpathentry kind="lib" path="jogl/gluegen-rt.jar"/>
 	<classpathentry kind="lib" path="jogl/gluegen.jar"/>
 	<classpathentry kind="lib" path="jogl/jogl-all-natives-windows-amd64.jar"/>
-	<classpathentry kind="lib" path="jogl/jogl-all.jar"/>
+	<classpathentry kind="lib" path="jogl/jogl.all.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
