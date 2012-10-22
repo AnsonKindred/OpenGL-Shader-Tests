@@ -5,7 +5,6 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 
-import javax.media.opengl.GL;
 import javax.media.opengl.GLAutoDrawable;
 import javax.media.opengl.GLCapabilities;
 import javax.media.opengl.GL2;
@@ -22,7 +21,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	static final float MAX_SPEED = .2f;
 	
 	static final int FLOAT_BYTES = Float.SIZE / Byte.SIZE;
-	static final int INT_BYTES = Integer.SIZE / Byte.SIZE;
 	
 	float viewWidth, viewHeight;
 	
@@ -107,9 +105,6 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 	 * Each vertex's z component is the index of the instance and can be used to
 	 * look up the instance's position using the positionSampler in the vertex shader.
 	 * 
-	 * OpenGL prefers directly allocated buffers.
-	 * They have improved performance over FloatBuffer.allocate and buffer.putFloat methods
-	 * 
 	 * @param gl
 	 */
 	private void _loadVertexData(GL2 gl)
@@ -130,6 +125,7 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		
 		// Map the buffer so that we can insert some data
 		ByteBuffer vertexBuffer = gl.glMapBuffer(GL2.GL_ARRAY_BUFFER, GL2.GL_WRITE_ONLY);
+		// Do this rather than using 'putFloat' directly on vertexBuffer, it's faster
 		FloatBuffer vertexFloatBuffer = vertexBuffer.order(ByteOrder.nativeOrder()).asFloatBuffer();
 		
 		// Add the vertices to the FloatBuffer
@@ -165,8 +161,9 @@ public class GLRenderer extends GLCanvas implements GLEventListener, WindowListe
 		positionBufferID = _generateBufferID(gl);
 		gl.glBindBuffer(GL2.GL_TEXTURE_BUFFER, positionBufferID);
 	    
-	    // Give it a size
+	    // Allocate some space
 	    int size = NUM_THINGS * 2 * FLOAT_BYTES;
+	    // Use STREAM_DRAW since the positions get updated very often 
 	    gl.glBufferData(GL2.GL_TEXTURE_BUFFER, size, null, GL2.GL_STREAM_DRAW);
 	    
 	    // Unbind
