@@ -3,7 +3,7 @@ import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 
 /**
- * Maintains model/view/projection matrix for transforming vertices in a scene.
+ * Maintains a matrix for transforming vertices in a scene.
  * Specialized for 2d transformations.
  * 
  * Seems to be a slight speed increase in using buffers instead of arrays
@@ -14,6 +14,7 @@ import java.nio.FloatBuffer;
 public class Matrix3x3
 {   
 	private static final int STACK_SIZE = 10;
+	
 	// 3x3 matrix of floats
 	private static final int MATRIX_BYTE_SIZE = 3*3*Float.SIZE/Byte.SIZE;
 	
