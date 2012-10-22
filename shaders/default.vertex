@@ -3,9 +3,6 @@ attribute vec3 vertex;
 
 uniform samplerBuffer positionSampler;
 
-attribute vec4 vertex_color;
-varying vec4 color;
-
 // Fetches the position from the texture buffer bound to positionSampler
 float positionFetch(int index)
 {
@@ -21,8 +18,6 @@ float positionFetch(int index)
 
 void main(void)  
 { 
-	color = vertex_color;  
-	
 	// Since we are just transforming we don't need any fancy model/view matrix, just add to the vertex position
 	float x = vertex.x + positionFetch( int(vertex.z)*2 );
 	float y = vertex.y + positionFetch( int(vertex.z)*2 + 1);
